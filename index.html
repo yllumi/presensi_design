@@ -95,8 +95,8 @@
     width:32px;height:32px;border-radius:10px;background:var(--primary);
     display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;
   }
-  .topbar .brand-name{ font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; }
-  .topbar .brand-sub{ font-size:10.5px; color:var(--ink-faint); }
+  .topbar .brand-name{ font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:600; }
+  .topbar .brand-sub{ font-size:14px; color:var(--ink-faint); }
 
   .content{ flex:1; overflow-y:auto; padding:4px 20px 16px; }
 
@@ -247,15 +247,8 @@
 
     <div class="topbar">
       <div class="brand">
-        <div class="brand-mark">
-          <svg width="16" height="16" viewBox="0 0 28 28" fill="currentColor">
-            <path d="M14 4c-3 2.5-5 5.5-5 9a5 5 0 0010 0c0-3.5-2-6.5-5-9z"/>
-            <rect x="13" y="1" width="2" height="3"/>
-            <rect x="5" y="21" width="18" height="2" opacity="0.55"/>
-          </svg>
-        </div>
         <div>
-          <div class="brand-name">Presensi Pesantren</div>
+          <div class="brand-name">Presensi Karyawan</div>
           <div class="brand-sub" x-text="officeLocation ? officeLocation.name : 'Memuat lokasi...'"></div>
         </div>
       </div>
