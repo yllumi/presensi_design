@@ -47,12 +47,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
 <style>
   :root{
-    --bg-page:#E7ECDF; --bg-surface:#ffffff; --bg-surface-2:#F3F5EC;
-    --ink:#142019; --ink-soft:#5B6A5F; --ink-faint:#92A092;
-    --primary:#17493C; --primary-soft:#DCE9E1;
-    --brass:#C79A3E; --brass-soft:#F3E7CC; --brass-ink:#8A6A22;
-    --rust:#B65B45; --rust-soft:#F3DED7;
-    --line:#E3E7DA;
+    --bg-page:#E8F2F4; --bg-surface:#ffffff; --bg-surface-2:#F0F6F7;
+    --ink:#14303A; --ink-soft:#5B7A82; --ink-faint:#92AAB0;
+    --primary:#3BC0CF; --primary-soft:#D4F0F3;
+    --brass:#157CA1; --brass-soft:#CEE6F0; --brass-ink:#0D5370;
+    --rust:#D94F4F; --rust-soft:#F5DEDE;
+    --line:#D4E4E8;
     --radius-lg:24px; --radius-md:16px; --radius-sm:10px;
   }
   *{box-sizing:border-box;}
@@ -464,7 +464,7 @@
 
 <script>
 const APP_CONFIG = {
-  apiBaseUrl: '/api',
+  apiBaseUrl: '/presensi_design/api',
   minAccuracyMeter: 50,
   geoTimeout: 15000,
   geoMaximumAge: 5000,
@@ -749,7 +749,7 @@ function attendanceApp() {
 
       // Ikon pesantren (marker hijau)
       const officeIcon = L.divIcon({
-        html: '<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" fill="#17493C" stroke="#fff" stroke-width="2.5"/><path d="M14 8c-2.2 0-4 1.8-4 4 0 3 4 7 4 7s4-4 4-7c0-2.2-1.8-4-4-4zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" fill="#fff"/></svg>',
+        html: '<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" fill="#3BC0CF" stroke="#fff" stroke-width="2.5"/><path d="M14 8c-2.2 0-4 1.8-4 4 0 3 4 7 4 7s4-4 4-7c0-2.2-1.8-4-4-4zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" fill="#fff"/></svg>',
         className: '',
         iconSize: [28, 28],
         iconAnchor: [14, 28],
@@ -763,8 +763,8 @@ function attendanceApp() {
       // Lingkaran radius
       this.radiusCircle = L.circle([ol.latitude, ol.longitude], {
         radius: ol.radius_meter,
-        color: '#17493C',
-        fillColor: '#DCE9E1',
+        color: '#3BC0CF',
+        fillColor: '#D4F0F3',
         fillOpacity: 0.35,
         weight: 2,
         dashArray: '5, 8'
