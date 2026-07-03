@@ -42,6 +42,8 @@
 <meta name="csrf-token" content="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
 <style>
   :root{
@@ -120,6 +122,10 @@
   .clock-card .time span{ opacity:.55; font-size:24px; }
 
   .card{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+
+  .map-container{ width:100%; height:220px; border-radius:var(--radius-md); margin:12px 0 6px; overflow:hidden;
+    border:1px solid var(--line); }
+  .map-container .leaflet-control-attribution{ font-size:9px; }
 
   .geo-top{ display:flex; align-items:center; gap:14px; }
   .radar{ width:64px; height:64px; flex-shrink:0; position:relative; display:flex; align-items:center; justify-content:center; }
@@ -212,7 +218,7 @@
   .bottomnav{
     position:sticky; bottom:0; left:0; right:0; background:var(--bg-surface);
     border-top:1px solid var(--line); display:flex; padding:6px 12px calc(env(safe-area-inset-bottom,0px) + 6px);
-    z-index:50; flex-shrink:0;
+    z-index:500; flex-shrink:0;
   }
   .bottomnav .item{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
     padding:7px 4px; border-radius:var(--radius-sm); cursor:pointer; transition:background .15s ease;
@@ -315,6 +321,8 @@
             <span>Radius absen: <b style="color:var(--ink)" x-text="(officeLocation ? officeLocation.radius_meter : '—') + ' m'"></b></span>
             <span x-text="'Akurasi GPS: ' + (accuracy !== null ? Math.round(accuracy) + ' m' : '—')"></span>
           </div>
+          <div class="map-container" x-ref="mapContainer" x-show="!geoLoading"></div>
+
           <div class="accuracy-warn" x-show="!geoLoading && accuracy !== null && accuracy > APP_CONFIG.minAccuracyMeter">
             <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10 6v5M10 14h.01" stroke-linecap="round"/><circle cx="10" cy="10" r="8"/></svg>
             <span>Akurasi GPS kurang baik. Coba pindah ke area terbuka agar deteksi lokasi lebih akurat.</span>
@@ -463,7 +471,7 @@
 
 <script>
 const APP_CONFIG = {
-  apiBaseUrl: '/presensi_design/api',
+  apiBaseUrl: '/api',
   minAccuracyMeter: 50,
   geoTimeout: 15000,
   geoMaximumAge: 5000,
@@ -596,6 +604,11 @@ function attendanceApp() {
     accuracy: null,
     distance: null,
     inRadius: false,
+    map: null,
+    mapInitialized: false,
+    userMarker: null,
+    officeMarker: null,
+    radiusCircle: null,
 
     loadingToday: true,
     todayStatus: { checked_in: false, checked_out: false, check_in_time: null, check_out_time: null, check_in_distance_meter: null, status: null },
@@ -645,6 +658,8 @@ function attendanceApp() {
     async loadOfficeLocation() {
       try {
         this.officeLocation = await fetchWithAuth('/office-locations/active');
+        // Inisialisasi map setelah data lokasi pesantren tersedia
+        this.$nextTick(() => this.initMap());
       } catch (e) {
         this.showToast('error', 'Gagal memuat lokasi pesantren', e.message);
       }
@@ -719,6 +734,87 @@ function attendanceApp() {
         );
         this.inRadius = this.distance <= this.officeLocation.radius_meter;
       }
+      this.updateMap();
+    },
+
+    initMap() {
+      if (this.mapInitialized || !this.officeLocation || !this.$refs.mapContainer) return;
+      this.mapInitialized = true;
+
+      const ol = this.officeLocation;
+      this.map = L.map(this.$refs.mapContainer, {
+        center: [ol.latitude, ol.longitude],
+        zoom: 16,
+        zoomControl: true,
+        attributionControl: true
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(this.map);
+
+      // Ikon pesantren (marker hijau)
+      const officeIcon = L.divIcon({
+        html: '<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" fill="#17493C" stroke="#fff" stroke-width="2.5"/><path d="M14 8c-2.2 0-4 1.8-4 4 0 3 4 7 4 7s4-4 4-7c0-2.2-1.8-4-4-4zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" fill="#fff"/></svg>',
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 28],
+        popupAnchor: [0, -32]
+      });
+
+      this.officeMarker = L.marker([ol.latitude, ol.longitude], { icon: officeIcon })
+        .addTo(this.map)
+        .bindPopup('<b>' + ol.name + '</b><br>Lokasi pesantren');
+
+      // Lingkaran radius
+      this.radiusCircle = L.circle([ol.latitude, ol.longitude], {
+        radius: ol.radius_meter,
+        color: '#17493C',
+        fillColor: '#DCE9E1',
+        fillOpacity: 0.35,
+        weight: 2,
+        dashArray: '5, 8'
+      }).addTo(this.map);
+
+      // Invalidate size after Alpine finishes rendering
+      setTimeout(() => this.map && this.map.invalidateSize(), 300);
+    },
+
+    updateMap() {
+      if (!this.map || !this.mapInitialized) return;
+      if (this.currentLat === null || this.currentLng === null) return;
+
+      // Hapus marker user lama jika ada
+      if (this.userMarker) {
+        this.userMarker.setLatLng([this.currentLat, this.currentLng]);
+      } else {
+        // Ikon user (lingkaran biru pulsing)
+        const userIcon = L.divIcon({
+          html: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#2563EB" stroke="#fff" stroke-width="2.5"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>',
+          className: '',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        this.userMarker = L.marker([this.currentLat, this.currentLng], { icon: userIcon })
+          .addTo(this.map)
+          .bindPopup('Lokasi Anda saat ini');
+      }
+
+      // Sesuaikan tampilan agar kedua marker terlihat
+      if (!this.map._userBoundsAdjusted) {
+        const group = L.featureGroup([
+          this.officeMarker,
+          L.circle([this.officeLocation.latitude, this.officeLocation.longitude], { radius: this.officeLocation.radius_meter }),
+          this.userMarker
+        ]);
+        this.map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 17 });
+        this.map._userBoundsAdjusted = true;
+      }
+
+      // Invalidate size tiap kali (untuk Leaflet di container tersembunyi)
+      this.map.invalidateSize();
     },
 
     handleGeoError(err) {
