@@ -1,0 +1,142 @@
+{
+  "employee": {
+    "id": 1,
+    "name": "Ahmad Faqih",
+    "unit": "Admin",
+    "position": "Pengajar",
+    "schedule_text": "Senin-Jumat 07:00-15:00"
+  },
+  "period": {
+    "id": 1,
+    "name": "Semester Genap 2025/2026"
+  },
+  "stats": {
+    "percent": 91,
+    "hadir": 17,
+    "telat": 3,
+    "alpa": 2,
+    "libur": 8
+  },
+  "calendar": [
+    {
+      "date": "2026-06-01",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-02",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-03",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-04",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-05",
+      "status": "tidak_hadir"
+    },
+    {
+      "date": "2026-06-06",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-07",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-08",
+      "status": "terlambat"
+    },
+    {
+      "date": "2026-06-09",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-10",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-11",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-12",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-13",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-14",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-15",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-16",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-17",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-18",
+      "status": "terlambat"
+    },
+    {
+      "date": "2026-06-19",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-20",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-21",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-22",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-23",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-24",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-25",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-26",
+      "status": "hadir"
+    },
+    {
+      "date": "2026-06-27",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-28",
+      "status": "bukan_hari_kerja"
+    },
+    {
+      "date": "2026-06-29",
+      "status": "tidak_hadir"
+    },
+    {
+      "date": "2026-06-30",
+      "status": "terlambat"
+    }
+  ]
+}

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Admin — Rekap Kehadiran (Tema Biru)</title>
+<!--
+  =====================================================================
+  HALAMAN ADMIN — REKAP KEHADIRAN — STATIC (SIAP GITHUB PAGES)
+  =====================================================================
+  Halaman ini menggunakan file JSON statis sebagai sumber data,
+  sehingga bisa di-host di GitHub Pages tanpa backend.
+
+  File JSON statis yang dibutuhkan:
+
+  GET {apiBaseUrl}/admin/attendance/daily.json
+      -> { date, is_holiday, holiday_name,
+           counts: { hadir, terlambat, tidak_hadir, libur, bukan_hari_kerja },
+           employees: [{ id, name, unit, status, check_in_time, check_in_distance_meter }] }
+
+  GET {apiBaseUrl}/admin/schedule-periods.json
+      -> [{ id, name, start_date, end_date, is_active }]
+
+  GET {apiBaseUrl}/admin/employees/{id}/attendance.json
+      -> { employee: { id, name, unit, position, schedule_text },
+           period: { id, name },
+           stats: { percent, hadir, telat, alpa, libur },
+           calendar: [{ date, status }] }
+
+  CATATAN:
+  - Semua data adalah dummy statis. Untuk produksi, ganti dengan backend sungguhan.
+  =====================================================================
+-->
+<meta name="csrf-token" content="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
+<style>
+  :root{
+    --bg-page:#E9F3F5; --bg-surface:#ffffff; --bg-surface-2:#F1F8FA;
+    --ink:#0F2630; --ink-soft:#4E6873; --ink-faint:#8CA3AB;
+    --primary:#157CA1; --primary-light:#3BC0CF; --primary-soft:#DCF1F5;
+    --brass:#C79A3E; --brass-soft:#F3E7CC; --brass-ink:#8A6A22;
+    --rust:#B65B45; --rust-soft:#F3DED7;
+    --slate:#7A8A93; --slate-soft:#E4EAEC;
+    --line:#DCEAEE;
+    --radius-lg:24px; --radius-md:16px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg-page); font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink);
+    min-height:100vh; -webkit-font-smoothing:antialiased; }
+  [x-cloak]{display:none!important;}
+
+  .app-shell{ max-width:560px; margin:0 auto; min-height:100vh; background:var(--bg-surface-2);
+    display:flex; flex-direction:column; position:relative; }
+  .app-shell::before{ content:""; position:absolute; top:0; left:0; right:0; height:4px;
+    background:linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%); z-index:5; }
+  @media (min-width:640px){
+    body{ padding:32px 16px; }
+    .app-shell{ min-height:calc(100vh - 64px); border-radius:32px;
+      box-shadow:0 40px 80px -30px rgba(15,60,80,0.28), 0 0 0 1px rgba(15,60,80,0.05); overflow:hidden; }
+    .app-shell::before{ border-radius:32px 32px 0 0; }
+  }
+
+  .appbar{ display:flex; align-items:center; gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 8px; flex-shrink:0; }
+  .appbar .back{ width:34px;height:34px;border-radius:50%;background:var(--bg-surface);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);flex-shrink:0; }
+  .appbar .titles{ flex:1; min-width:0; }
+  .appbar .titles h2{ font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0; font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .appbar .titles .sub{ font-size:12px; color:var(--ink-faint); margin-top:1px; }
+
+  .content{ flex:1; overflow-y:auto; padding:8px 20px 32px; }
+
+  .date-nav{ display:flex; align-items:center; gap:8px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:999px; padding:6px; margin:8px 0 4px; }
+  .date-nav button.arrow{ width:34px;height:34px;border-radius:50%;border:none;background:var(--bg-surface-2);
+    display:flex;align-items:center;justify-content:center;color:var(--primary);cursor:pointer;flex-shrink:0; }
+  .date-nav .label{ flex:1; text-align:center; position:relative; }
+  .date-nav .label .d1{ font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; }
+  .date-nav .label input[type=date]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .date-note{ text-align:center; font-size:11.5px; color:var(--ink-faint); margin-bottom:14px; }
+  .date-note.warn{ color:var(--rust); font-weight:600; }
+  .today-chip{ display:flex; justify-content:center; margin-bottom:2px; }
+  .today-chip button{ background:none; border:none; color:var(--primary); font-weight:700; font-size:12px; cursor:pointer;
+    font-family:'Plus Jakarta Sans',sans-serif; }
+
+  .search-box{ display:flex; align-items:center; gap:8px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:999px; padding:10px 14px; margin-bottom:12px; color:var(--ink-faint); transition:border-color .15s, box-shadow .15s; }
+  .search-box:focus-within{ border-color:var(--primary-light); box-shadow:0 0 0 3px rgba(59,192,207,0.16); }
+  .search-box input{ flex:1; border:none; outline:none; background:none; font-family:'Plus Jakarta Sans',sans-serif;
+    font-size:13px; color:var(--ink); }
+
+  .stat-row{ display:flex; gap:8px; overflow-x:auto; padding:4px 0 16px; }
+  .stat-row::-webkit-scrollbar{ display:none; }
+  .stat-pill{ flex-shrink:0; min-width:78px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:10px 14px; }
+  .stat-pill .n{ font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; }
+  .stat-pill .l{ font-size:10.5px; color:var(--ink-faint); margin-top:1px; white-space:nowrap; }
+  .stat-pill.hadir .n{ color:var(--primary); }
+  .stat-pill.telat .n{ color:var(--brass-ink); }
+  .stat-pill.alpa .n{ color:var(--rust); }
+  .stat-pill.libur .n{ color:var(--slate); }
+
+  .chip-row{ display:flex; gap:6px; overflow-x:auto; padding-bottom:12px; }
+  .chip-row::-webkit-scrollbar{ display:none; }
+  .chip{ flex-shrink:0; font-size:12px; font-weight:600; padding:7px 13px; border-radius:999px;
+    border:1.5px solid var(--line); background:var(--bg-surface); color:var(--ink-soft); cursor:pointer; white-space:nowrap; }
+  .chip.selected{ background:var(--primary); border-color:var(--primary); color:#fff; }
+
+  .emp-row{ display:flex; align-items:center; gap:12px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 13px; margin-bottom:8px; cursor:pointer; }
+  .emp-row:active{ background:var(--bg-surface-2); }
+  .avatar{ width:38px;height:38px;border-radius:50%;background:var(--primary-soft);color:var(--primary);
+    display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;
+    font-size:14px;flex-shrink:0; }
+  .emp-info{ flex:1; min-width:0; }
+  .emp-info .nm{ font-size:13.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .emp-info .un{ font-size:11.5px; color:var(--ink-faint); margin-top:1px; }
+  .emp-right{ text-align:right; flex-shrink:0; }
+  .status-badge{ font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:999px; display:inline-block; }
+  .status-badge.hadir{ background:var(--primary-soft); color:var(--primary); }
+  .status-badge.terlambat{ background:var(--brass-soft); color:var(--brass-ink); }
+  .status-badge.tidak_hadir{ background:var(--rust-soft); color:var(--rust); }
+  .status-badge.libur{ background:var(--slate-soft); color:var(--slate); }
+  .status-badge.bukan_hari_kerja{ background:var(--bg-surface-2); color:var(--ink-faint); border:1px dashed var(--line); }
+  .emp-right .tm{ font-size:10.5px; color:var(--ink-faint); margin-top:4px; }
+
+  .section-label{ font-family:'Space Grotesk',sans-serif; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    margin:20px 0 10px 2px; text-transform:uppercase; letter-spacing:.06em; }
+
+  .profile-card{ display:flex; align-items:center; gap:12px;
+    background:linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); color:#fff;
+    border-radius:var(--radius-lg); padding:16px 18px; margin:10px 0 16px; }
+  .profile-card .avatar-lg{ width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,0.16);
+    display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;
+    font-size:17px;flex-shrink:0; }
+  .profile-card .pn{ font-family:'Space Grotesk',sans-serif; font-size:15.5px; font-weight:600; }
+  .profile-card .pu{ font-size:12px; opacity:.75; margin-top:1px; }
+
+  select.period-select{ width:100%; padding:12px 14px; border-radius:var(--radius-md); border:1px solid var(--line);
+    background:var(--bg-surface); font-family:'Plus Jakarta Sans',sans-serif; font-size:13px; font-weight:600;
+    color:var(--ink); appearance:none; margin-bottom:16px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none' stroke='%235B6A5F' stroke-width='2'><path d='M5 8l5 5 5-5'/></svg>");
+    background-repeat:no-repeat; background-position:right 14px center; }
+
+  .percent-card{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:20px; text-align:center; margin-bottom:14px; }
+  .percent-card .big{ font-family:'Space Grotesk',sans-serif; font-size:38px; font-weight:700; color:var(--primary); }
+  .percent-card .big span{ font-size:18px; opacity:.6; }
+  .percent-card .cap{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:20px; }
+  .stat-box{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:12px 14px; }
+  .stat-box .n{ font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700; }
+  .stat-box .l{ font-size:11px; color:var(--ink-faint); margin-top:1px; }
+  .stat-box.hadir .n{ color:var(--primary); }
+  .stat-box.telat .n{ color:var(--brass-ink); }
+  .stat-box.alpa .n{ color:var(--rust); }
+  .stat-box.libur .n{ color:var(--slate); }
+
+  .cal-card{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:16px; margin-bottom:14px; }
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-nav .mlabel{ font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; }
+  .cal-nav button{ width:28px;height:28px;border-radius:50%;border:1px solid var(--line);background:var(--bg-surface-2);
+    color:var(--primary);cursor:pointer;display:flex;align-items:center;justify-content:center; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+  .cal-dow{ font-size:9.5px; color:var(--ink-faint); text-align:center; font-weight:700; }
+  .cal-cell{ aspect-ratio:1; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:600; }
+  .cal-cell.empty{ visibility:hidden; }
+  .cal-cell.hadir{ background:var(--primary); color:#fff; }
+  .cal-cell.terlambat{ background:var(--brass); color:#fff; }
+  .cal-cell.tidak_hadir{ background:var(--rust); color:#fff; }
+  .cal-cell.libur{ background:var(--slate-soft); color:var(--slate); }
+  .cal-cell.bukan_hari_kerja{ background:var(--bg-surface-2); color:var(--ink-faint); border:1px dashed var(--line); }
+  .cal-cell.upcoming{ background:transparent; color:var(--ink-faint); }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+  .legend .li{ display:flex; align-items:center; gap:5px; font-size:10.5px; color:var(--ink-soft); }
+  .legend .dot{ width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+  .legend .dot.hadir{ background:var(--primary); }
+  .legend .dot.terlambat{ background:var(--brass); }
+  .legend .dot.tidak_hadir{ background:var(--rust); }
+  .legend .dot.libur{ background:var(--slate); }
+  .legend .dot.bukan_hari_kerja{ background:var(--bg-surface-2); border:1px dashed var(--ink-faint); }
+
+  .note-row{ display:flex; align-items:center; gap:12px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 13px; margin-bottom:8px; }
+  .note-row .icn{ width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+  .note-row .icn.tidak_hadir{ background:var(--rust-soft); color:var(--rust); }
+  .note-row .icn.terlambat{ background:var(--brass-soft); color:var(--brass-ink); }
+  .note-row .b1{ font-size:13px; font-weight:700; }
+  .note-row .b2{ font-size:11px; color:var(--ink-faint); margin-top:1px; }
+
+  .empty-state{ text-align:center; padding:26px 10px; color:var(--ink-faint); font-size:12.5px; }
+
+  .error-box{ display:flex; gap:10px; align-items:flex-start; background:var(--rust-soft); color:var(--rust);
+    border-radius:var(--radius-md); padding:13px 14px; margin-bottom:14px; font-size:12.5px; line-height:1.55; }
+  .error-box button{ margin-top:8px; background:var(--rust); color:#fff; border:none; padding:6px 12px;
+    border-radius:999px; font-size:11.5px; font-weight:700; cursor:pointer; }
+
+  .skeleton{ background:linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-surface-2) 37%, var(--bg-surface) 63%);
+    background-size:400% 100%; animation:shimmer 1.4s ease infinite; border-radius:var(--radius-md); }
+  @keyframes shimmer{ 0%{background-position:100% 0;} 100%{background-position:-100% 0;} }
+  .skel-row{ height:56px; margin-bottom:8px; }
+  .skel-card{ height:120px; margin-bottom:14px; }
+
+  .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px; max-width:440px; width:calc(100% - 40px);
+    background:var(--primary); color:#fff; border-radius:var(--radius-md); padding:13px 15px;
+    display:flex; align-items:center; gap:11px; box-shadow:0 20px 40px -15px rgba(15,30,22,0.5); z-index:60; }
+  .toast.error{ background:var(--rust); }
+  .toast .icn{ width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.16);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+  .toast .t1{ font-size:13px; font-weight:700; }
+  .toast .t2{ font-size:11px; opacity:.85; margin-top:1px; }
+
+  svg{ display:block; }
+</style>
+</head>
+<body>
+
+<div id="app" x-data="adminRekap()" x-init="init()" x-cloak>
+  <div class="app-shell">
+
+    <!-- ===================== REKAP HARIAN ===================== -->
+    <template x-if="screen==='daily'">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;">
+        <div class="appbar">
+          <a class="back" href="index.html" style="text-decoration:none;">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <div class="titles">
+            <h2>Rekap Kehadiran</h2>
+            <div class="sub">Seluruh karyawan &amp; guru</div>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="date-nav">
+            <button class="arrow" @click="changeDay(-1)">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="label">
+              <div class="d1" x-text="dateLabel"></div>
+              <input type="date" :value="isoDate" @change="setDate($event.target.value)">
+            </div>
+            <button class="arrow" @click="changeDay(1)">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="today-chip" x-show="!isToday"><button @click="goToday()">Kembali ke hari ini</button></div>
+
+          <template x-if="dailyError">
+            <div class="error-box">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10 6v5M10 14h.01" stroke-linecap="round"/><circle cx="10" cy="10" r="8"/></svg>
+              <div>
+                <div x-text="dailyError"></div>
+                <button @click="loadDaily()">Coba Lagi</button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="!dailyError">
+            <div>
+              <div class="date-note" :class="daily && daily.is_holiday && 'warn'">
+                <template x-if="loadingDaily">Memuat data...</template>
+                <template x-if="!loadingDaily && daily && daily.is_holiday">
+                  <span x-text="'Tanggal ini libur' + (daily.holiday_name ? (': ' + daily.holiday_name) : '') + ' — tidak dihitung alpa'"></span>
+                </template>
+                <template x-if="!loadingDaily && daily && !daily.is_holiday">Menampilkan hari kerja aktif</template>
+              </div>
+
+              <template x-if="loadingDaily">
+                <div>
+                  <div class="skeleton skel-card"></div>
+                  <div class="skeleton skel-row"></div>
+                  <div class="skeleton skel-row"></div>
+                  <div class="skeleton skel-row"></div>
+                </div>
+              </template>
+
+              <template x-if="!loadingDaily && daily">
+                <div>
+                  <div class="stat-row">
+                    <div class="stat-pill hadir"><div class="n" x-text="daily.counts.hadir"></div><div class="l">Hadir</div></div>
+                    <div class="stat-pill telat"><div class="n" x-text="daily.counts.terlambat"></div><div class="l">Terlambat</div></div>
+                    <div class="stat-pill alpa"><div class="n" x-text="daily.counts.tidak_hadir"></div><div class="l">Tidak Hadir</div></div>
+                    <div class="stat-pill libur"><div class="n" x-text="daily.counts.libur + daily.counts.bukan_hari_kerja"></div><div class="l">Libur/Off</div></div>
+                  </div>
+
+                  <div class="search-box">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M17 17l-4-4" stroke-linecap="round"/></svg>
+                    <input type="text" x-model="search" placeholder="Cari nama karyawan...">
+                  </div>
+
+                  <div class="chip-row">
+                    <button class="chip" :class="filter==='semua' && 'selected'" @click="filter='semua'">Semua</button>
+                    <button class="chip" :class="filter==='hadir' && 'selected'" @click="filter='hadir'">Hadir</button>
+                    <button class="chip" :class="filter==='terlambat' && 'selected'" @click="filter='terlambat'">Terlambat</button>
+                    <button class="chip" :class="filter==='tidak_hadir' && 'selected'" @click="filter='tidak_hadir'">Tidak Hadir</button>
+                    <button class="chip" :class="filter==='libur' && 'selected'" @click="filter='libur'">Libur/Off</button>
+                  </div>
+
+                  <template x-for="e in filteredEmployees()" :key="e.id">
+                    <div class="emp-row" @click="openDetail(e.id)">
+                      <div class="avatar" x-text="initials(e.name)"></div>
+                      <div class="emp-info">
+                        <div class="nm" x-text="e.name"></div>
+                        <div class="un" x-text="e.unit"></div>
+                      </div>
+                      <div class="emp-right">
+                        <span class="status-badge" :class="e.status" x-text="statusLabel(e.status)"></span>
+                        <div class="tm" x-show="e.status==='hadir' || e.status==='terlambat'" x-text="e.check_in_time"></div>
+                      </div>
+                    </div>
+                  </template>
+                  <div class="empty-state" x-show="filteredEmployees().length===0">Tidak ada data untuk filter ini.</div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- ===================== DETAIL KARYAWAN ===================== -->
+    <template x-if="screen==='detail'">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;">
+        <div class="appbar">
+          <div class="back" @click="goBackToList()">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="titles">
+            <h2>Detail Presensi</h2>
+            <div class="sub" x-text="detail ? detail.employee.unit : ''"></div>
+          </div>
+        </div>
+
+        <div class="content">
+          <template x-if="detailError">
+            <div class="error-box">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10 6v5M10 14h.01" stroke-linecap="round"/><circle cx="10" cy="10" r="8"/></svg>
+              <div>
+                <div x-text="detailError"></div>
+                <button @click="loadDetail()">Coba Lagi</button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="loadingDetail">
+            <div>
+              <div class="skeleton skel-card"></div>
+              <div class="skeleton skel-card"></div>
+              <div class="skeleton" style="height:300px;"></div>
+            </div>
+          </template>
+
+          <template x-if="!loadingDetail && !detailError && detail">
+            <div>
+              <div class="profile-card">
+                <div class="avatar-lg" x-text="initials(detail.employee.name)"></div>
+                <div>
+                  <div class="pn" x-text="detail.employee.name"></div>
+                  <div class="pu" x-text="detail.employee.unit + (detail.employee.schedule_text ? (' · ' + detail.employee.schedule_text) : '')"></div>
+                </div>
+              </div>
+
+              <select class="period-select" x-model.number="periodId" @change="loadDetail()">
+                <template x-for="p in periods" :key="p.id">
+                  <option :value="p.id" x-text="p.name"></option>
+                </template>
+              </select>
+
+              <div class="percent-card">
+                <div class="big" x-html="detail.stats.percent + '<span>%</span>'"></div>
+                <div class="cap">Persentase kehadiran periode ini</div>
+              </div>
+
+              <div class="stat-grid">
+                <div class="stat-box hadir"><div class="n" x-text="detail.stats.hadir"></div><div class="l">Hadir</div></div>
+                <div class="stat-box telat"><div class="n" x-text="detail.stats.telat"></div><div class="l">Terlambat</div></div>
+                <div class="stat-box alpa"><div class="n" x-text="detail.stats.alpa"></div><div class="l">Tidak Hadir</div></div>
+                <div class="stat-box libur"><div class="n" x-text="detail.stats.libur"></div><div class="l">Libur / Bukan Hari Kerja</div></div>
+              </div>
+
+              <div class="cal-card">
+                <div class="cal-nav">
+                  <button @click="changeMonth(-1)">
+                    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <div class="mlabel" x-text="monthLabel"></div>
+                  <button @click="changeMonth(1)">
+                    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </div>
+                <div class="cal-grid">
+                  <div class="cal-dow">M</div><div class="cal-dow">S</div><div class="cal-dow">S</div>
+                  <div class="cal-dow">R</div><div class="cal-dow">K</div><div class="cal-dow">J</div><div class="cal-dow">S</div>
+                  <template x-for="c in calendarCells()" :key="c.key">
+                    <div class="cal-cell" :class="c.status" x-text="c.day || ''"></div>
+                  </template>
+                </div>
+                <div class="legend">
+                  <div class="li"><span class="dot hadir"></span>Hadir</div>
+                  <div class="li"><span class="dot terlambat"></span>Terlambat</div>
+                  <div class="li"><span class="dot tidak_hadir"></span>Alpa</div>
+                  <div class="li"><span class="dot libur"></span>Libur</div>
+                  <div class="li"><span class="dot bukan_hari_kerja"></span>Bukan hari kerja</div>
+                </div>
+              </div>
+
+              <div class="section-label">Catatan Ketidakhadiran</div>
+              <template x-for="n in absenceNotes()" :key="n.date">
+                <div class="note-row">
+                  <div class="icn" :class="n.status">
+                    <svg x-show="n.status==='tidak_hadir'" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l8 8M14 6l-8 8" stroke-linecap="round"/></svg>
+                    <svg x-show="n.status==='terlambat'" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round"/></svg>
+                  </div>
+                  <div>
+                    <div class="b1" x-text="n.status==='tidak_hadir' ? 'Tidak hadir' : 'Terlambat'"></div>
+                    <div class="b2" x-text="formatDateLong(n.date)"></div>
+                  </div>
+                </div>
+              </template>
+              <div class="empty-state" x-show="absenceNotes().length===0">Tidak ada catatan alpa/terlambat bulan ini.</div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <div class="toast" :class="toast.type" x-show="toast.show" x-transition x-cloak>
+      <div class="icn">
+        <svg x-show="toast.type!=='error'" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg x-show="toast.type==='error'" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2"><path d="M6 6l8 8M14 6l-8 8" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="t1" x-text="toast.title"></div>
+        <div class="t2" x-show="toast.desc" x-text="toast.desc"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const APP_CONFIG = {
+  apiBaseUrl: '/api' // TODO: sesuaikan prefix rute API admin Webman Anda
+};
+
+async function fetchWithAuth(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
+  // --- GET request: ambil dari file JSON statis ---
+  if (method === 'GET') {
+    const qsIndex = path.indexOf('?');
+    const basePath = qsIndex === -1 ? path : path.slice(0, qsIndex);
+    const qs = qsIndex === -1 ? '' : path.slice(qsIndex);
+    const url = APP_CONFIG.apiBaseUrl + basePath + '.json' + qs;
+    const res = await fetch(url);
+    let body = null;
+    try { body = await res.json(); } catch (e) { /* non-JSON */ }
+    if (!res.ok) {
+      const message = (body && body.message) ? body.message : 'Terjadi kesalahan, silakan coba lagi.';
+      const err = new Error(message);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+
+  throw new Error('Hanya GET yang didukung untuk file statis.');
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function toIso(d){ return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
+
+function adminRekap() {
+  return {
+    screen: 'daily',        // 'daily' | 'detail' — disinkronkan dengan location.hash
+    date: new Date(),
+    daily: null,
+    loadingDaily: true,
+    dailyError: null,
+    filter: 'semua',
+    search: '',
+
+    periods: [],
+    periodId: null,
+    selectedEmployeeId: null,
+    detail: null,
+    loadingDetail: true,
+    detailError: null,
+    calYear: null,
+    calMonth: null,
+
+    toast: { show: false, type: 'success', title: '', desc: '' },
+
+    async init() {
+      window.addEventListener('hashchange', () => this.syncFromHash());
+      await this.loadPeriods();
+      this.syncFromHash();
+      if (this.screen === 'daily') this.loadDaily();
+    },
+
+    syncFromHash() {
+      const hash = location.hash.replace(/^#\/?/, '');
+      const m = hash.match(/^detail\/(\d+)/);
+      if (m) {
+        this.screen = 'detail';
+        const id = parseInt(m[1], 10);
+        if (id !== this.selectedEmployeeId) {
+          this.selectedEmployeeId = id;
+          const now = new Date();
+          this.calYear = now.getFullYear();
+          this.calMonth = now.getMonth();
+          this.loadDetail();
+        }
+      } else {
+        this.screen = 'daily';
+      }
+    },
+
+    // ---------- Daily recap ----------
+    get isoDate() { return toIso(this.date); },
+    get dateLabel() {
+      const hari = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][this.date.getDay()];
+      const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][this.date.getMonth()];
+      return hari + ', ' + this.date.getDate() + ' ' + bulan + ' ' + this.date.getFullYear();
+    },
+    get isToday() { return this.date.toDateString() === new Date().toDateString(); },
+
+    changeDay(n) { const d = new Date(this.date); d.setDate(d.getDate() + n); this.date = d; this.loadDaily(); },
+    setDate(v) { if (!v) return; this.date = new Date(v + 'T00:00:00'); this.loadDaily(); },
+    goToday() { this.date = new Date(); this.loadDaily(); },
+
+    async loadDaily() {
+      this.loadingDaily = true;
+      this.dailyError = null;
+      try {
+        this.daily = await fetchWithAuth('/admin/attendance/daily?date=' + this.isoDate);
+      } catch (e) {
+        this.dailyError = e.message;
+      } finally {
+        this.loadingDaily = false;
+      }
+    },
+
+    statusLabel(s) {
+      return { hadir:'Hadir', terlambat:'Terlambat', tidak_hadir:'Tidak Hadir', libur:'Libur', bukan_hari_kerja:'Bukan Hari Kerja' }[s] || s;
+    },
+
+    initials(name) {
+      return (name || '').split(' ').filter(w => w.length > 1).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    },
+
+    filteredEmployees() {
+      if (!this.daily) return [];
+      let list = this.daily.employees;
+      if (this.filter === 'libur') list = list.filter(e => e.status === 'libur' || e.status === 'bukan_hari_kerja');
+      else if (this.filter !== 'semua') list = list.filter(e => e.status === this.filter);
+      if (this.search.trim()) {
+        const q = this.search.trim().toLowerCase();
+        list = list.filter(e => e.name.toLowerCase().includes(q));
+      }
+      return list;
+    },
+
+    // ---------- Detail employee ----------
+    openDetail(id) { location.hash = '#/detail/' + id; },
+    goBackToList() { location.hash = '#/'; },
+
+    async loadPeriods() {
+      try {
+        this.periods = await fetchWithAuth('/admin/schedule-periods');
+        const active = this.periods.find(p => p.is_active);
+        this.periodId = active ? active.id : (this.periods[0] ? this.periods[0].id : null);
+      } catch (e) {
+        this.showToast('error', 'Gagal memuat daftar periode', e.message);
+      }
+    },
+
+    async loadDetail() {
+      if (!this.selectedEmployeeId || !this.periodId) return;
+      this.loadingDetail = true;
+      this.detailError = null;
+      try {
+        this.detail = await fetchWithAuth(
+          '/admin/employees/' + this.selectedEmployeeId + '/attendance' +
+          '?period_id=' + this.periodId + '&year=' + this.calYear + '&month=' + (this.calMonth + 1)
+        );
+      } catch (e) {
+        this.detailError = e.message;
+      } finally {
+        this.loadingDetail = false;
+      }
+    },
+
+    get monthLabel() {
+      const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      return bulan[this.calMonth] + ' ' + this.calYear;
+    },
+    changeMonth(n) {
+      let m = this.calMonth + n, y = this.calYear;
+      if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+      this.calMonth = m; this.calYear = y;
+      this.loadDetail();
+    },
+
+    calendarCells() {
+      if (!this.detail) return [];
+      const y = this.calYear, m = this.calMonth;
+      const firstDow = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const byDate = {};
+      this.detail.calendar.forEach(c => { byDate[c.date] = c.status; });
+      const cells = [];
+      for (let i = 0; i < firstDow; i++) cells.push({ key: 'e' + i, day: '', status: 'empty' });
+      for (let d = 1; d <= daysInMonth; d++) {
+        const iso = y + '-' + pad2(m + 1) + '-' + pad2(d);
+        cells.push({ key: 'd' + d, day: d, status: byDate[iso] || 'upcoming' });
+      }
+      return cells;
+    },
+
+    absenceNotes() {
+      if (!this.detail) return [];
+      return this.detail.calendar.filter(c => c.status === 'tidak_hadir' || c.status === 'terlambat');
+    },
+
+    formatDateLong(iso) {
+      const d = new Date(iso + 'T00:00:00');
+      const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      return d.getDate() + ' ' + bulan[d.getMonth()] + ' ' + d.getFullYear();
+    },
+
+    showToast(type, title, desc) {
+      this.toast = { show: true, type, title, desc: desc || '' };
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(() => { this.toast.show = false; }, 3800);
+    }
+  };
+}
+</script>
+</body>
+</html>

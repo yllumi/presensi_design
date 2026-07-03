@@ -1,0 +1,78 @@
+{
+  "date": "2026-07-03",
+  "is_holiday": false,
+  "holiday_name": null,
+  "counts": {
+    "hadir": 7,
+    "terlambat": 1,
+    "tidak_hadir": 0,
+    "libur": 0,
+    "bukan_hari_kerja": 0
+  },
+  "employees": [
+    {
+      "id": 1,
+      "name": "Ahmad Faqih",
+      "unit": "Admin",
+      "status": "hadir",
+      "check_in_time": "07:00",
+      "check_in_distance_meter": 57
+    },
+    {
+      "id": 2,
+      "name": "Siti Khadijah",
+      "unit": "Guru",
+      "status": "hadir",
+      "check_in_time": "07:03",
+      "check_in_distance_meter": 24
+    },
+    {
+      "id": 3,
+      "name": "Muhammad Rizqi",
+      "unit": "Umum & Administrasi",
+      "status": "hadir",
+      "check_in_time": "07:01",
+      "check_in_distance_meter": 53
+    },
+    {
+      "id": 4,
+      "name": "Nur Aisyah",
+      "unit": "Umum & Administrasi",
+      "status": "hadir",
+      "check_in_time": "07:09",
+      "check_in_distance_meter": 37
+    },
+    {
+      "id": 5,
+      "name": "Abdullah Hanif",
+      "unit": "Guru",
+      "status": "hadir",
+      "check_in_time": "07:00",
+      "check_in_distance_meter": 15
+    },
+    {
+      "id": 6,
+      "name": "Fatimah Zahra",
+      "unit": "Kepesantrenan",
+      "status": "terlambat",
+      "check_in_time": "07:27",
+      "check_in_distance_meter": 149
+    },
+    {
+      "id": 7,
+      "name": "Hasan Basri",
+      "unit": "Kepesantrenan",
+      "status": "hadir",
+      "check_in_time": "07:08",
+      "check_in_distance_meter": 22
+    },
+    {
+      "id": 8,
+      "name": "Aisyah Rahma",
+      "unit": "Guru",
+      "status": "hadir",
+      "check_in_time": "07:03",
+      "check_in_distance_meter": 38
+    }
+  ]
+}
