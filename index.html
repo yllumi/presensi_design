@@ -6,43 +6,37 @@
 <title>Presensi Karyawan</title>
 <!--
   =====================================================================
-  HALAMAN PRESENSI KARYAWAN — SIAP PRODUKSI
+  HALAMAN PRESENSI KARYAWAN — STATIC (SIAP GITHUB PAGES)
   =====================================================================
-  Kontrak API yang diharapkan dari backend Webman (sesuaikan
-  APP_CONFIG.apiBaseUrl di bawah dengan prefix rute Anda):
+  Halaman ini menggunakan file JSON statis sebagai sumber data,
+  sehingga bisa di-host di GitHub Pages tanpa backend.
 
-  GET  {apiBaseUrl}/me
+  File JSON statis yang dibutuhkan:
+
+  GET  {apiBaseUrl}/me.json
        -> { id, name, role, unit }
 
-  GET  {apiBaseUrl}/office-locations/active
+  GET  {apiBaseUrl}/office-locations/active.json
        -> { id, name, latitude, longitude, radius_meter }
 
-  GET  {apiBaseUrl}/attendance/today
+  GET  {apiBaseUrl}/attendance/today.json
        -> { checked_in: bool, checked_out: bool,
             check_in_time: "07:58"|null, check_out_time: "15:02"|null,
             check_in_distance_meter: 42|null, status: "hadir"|"terlambat"|null }
 
-  POST {apiBaseUrl}/attendance/check-in
-       body: { latitude, longitude, accuracy }
-       -> 200 { success:true, check_in_time, distance_meter, status }
-       -> 422 { success:false, message: "Anda berada di luar radius (165 m)" }
-
-  POST {apiBaseUrl}/attendance/check-out
-       body: { latitude, longitude, accuracy }
-       -> 200 { success:true, check_out_time, distance_meter }
-       -> 422 { success:false, message }
-
-  GET  {apiBaseUrl}/attendance/history?limit=30
+  GET  {apiBaseUrl}/attendance/history.json
        -> [{ date:"2026-07-02", check_in_time, check_out_time, status,
              check_in_distance_meter, check_out_distance_meter }]
 
-  CATATAN KEAMANAN:
-  - Jarak yang dihitung di halaman ini (Haversine di JS) HANYA untuk
-    umpan balik visual instan ke karyawan. Validasi jarak yang
-    menentukan sah/tidaknya presensi WAJIB dihitung ulang di server
-    (jangan percaya nilai jarak dari client).
-  - Sesuaikan fetchWithAuth() di bawah dengan mekanisme autentikasi
-    Anda (session cookie Webman, token header, atau CSRF meta tag).
+  POST /attendance/check-in & /attendance/check-out:
+       Disimulasikan di sisi client (tidak ada backend).
+       Hasil disimpan di localStorage agar bertahan saat refresh.
+
+  CATATAN:
+  - Check-in/check-out bersifat simulasi — tidak ada data yang
+    benar-benar tersimpan di server.
+  - localStorage hanya berlaku di browser yang sama.
+  - Untuk produksi, ganti simulasi dengan backend sungguhan.
   =====================================================================
 -->
 <meta name="csrf-token" content="">
@@ -102,7 +96,7 @@
   .topbar .brand-name{ font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; }
   .topbar .brand-sub{ font-size:10.5px; color:var(--ink-faint); }
 
-  .content{ flex:1; overflow-y:auto; padding:4px 20px 32px; }
+  .content{ flex:1; overflow-y:auto; padding:4px 20px 16px; }
 
   .tabs{ display:flex; gap:6px; margin:6px 0 18px; background:var(--bg-surface); border:1px solid var(--line);
     border-radius:999px; padding:4px; }
@@ -215,7 +209,20 @@
 
   .empty-state{ text-align:center; padding:30px 12px; color:var(--ink-faint); font-size:12.5px; }
 
-  .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px; max-width:440px; width:calc(100% - 40px);
+  .bottomnav{
+    position:sticky; bottom:0; left:0; right:0; background:var(--bg-surface);
+    border-top:1px solid var(--line); display:flex; padding:6px 12px calc(env(safe-area-inset-bottom,0px) + 6px);
+    z-index:50; flex-shrink:0;
+  }
+  .bottomnav .item{ flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:7px 4px; border-radius:var(--radius-sm); cursor:pointer; transition:background .15s ease;
+    text-decoration:none; color:var(--ink-faint); border:none; background:none;
+    font-family:'Plus Jakarta Sans',sans-serif; font-size:10.5px; font-weight:600; }
+  .bottomnav .item:active{ background:var(--bg-surface-2); }
+  .bottomnav .item.active{ color:var(--primary); }
+  .bottomnav .item svg{ width:22px; height:22px; }
+
+  .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:90px; max-width:440px; width:calc(100% - 40px);
     background:var(--primary); color:#fff; border-radius:var(--radius-md); padding:13px 15px;
     display:flex; align-items:center; gap:11px; box-shadow:0 20px 40px -15px rgba(15,30,22,0.5); z-index:60; }
   .toast.error{ background:var(--rust); }
@@ -419,6 +426,27 @@
       </div>
     </div>
 
+    <!-- BOTTOM NAVIGATION -->
+    <nav class="bottomnav">
+      <button class="item" :class="tab==='home' && 'active'" @click="tab='home'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+        </svg>
+        <span>Checkin</span>
+      </button>
+      <button class="item" :class="tab==='history' && 'active'" @click="switchToHistory()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>Rekap</span>
+      </button>
+    </nav>
+
     <div class="toast" :class="toast.type" x-show="toast.show" x-transition x-cloak>
       <div class="icn">
         <svg x-show="toast.type!=='error'" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -442,28 +470,103 @@ const APP_CONFIG = {
   historyLimit: 30
 };
 
-async function fetchWithAuth(path, options = {}) {
-  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-  const headers = Object.assign(
-    { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    csrfMeta && csrfMeta.content ? { 'X-CSRF-TOKEN': csrfMeta.content } : {},
-    options.headers || {}
-  );
-  const res = await fetch(APP_CONFIG.apiBaseUrl + path, {
-    credentials: 'same-origin',
-    ...options,
-    headers
-  });
-  let body = null;
-  try { body = await res.json(); } catch (e) { /* respons kosong/non-JSON */ }
-  if (!res.ok) {
-    const message = (body && body.message) ? body.message : 'Terjadi kesalahan, silakan coba lagi.';
-    const err = new Error(message);
-    err.status = res.status;
-    err.body = body;
+// ============================================================
+// STORAGE KEY untuk menyimpan state presensi hari ini di localStorage
+// ============================================================
+const STORAGE_KEY = 'presensi_today_' + new Date().toISOString().slice(0, 10); // e.g. presensi_today_2026-07-03
+
+function getTodayFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveTodayToStorage(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    // localStorage penuh / tidak tersedia — silently ignore
+  }
+}
+
+// ============================================================
+// SIMULASI CHECK-IN / CHECK-OUT (tanpa backend)
+// ============================================================
+function simulateCheckIn(lat, lng, officeLocation) {
+  const dist = distanceMeters(lat, lng, officeLocation.latitude, officeLocation.longitude);
+  const radius = officeLocation.radius_meter;
+
+  if (dist > radius) {
+    const err = new Error(`Anda berada di luar radius (${dist} m). Maksimal ${radius} m dari pesantren.`);
+    err.status = 422;
     throw err;
   }
-  return body;
+
+  const now = new Date();
+  const jam = now.getHours();
+  const menit = now.getMinutes();
+  const batas = 7 * 60 + 15; // 07:15
+  const sekarang = jam * 60 + menit;
+  const status = sekarang > batas ? 'terlambat' : 'hadir';
+  const time = String(jam).padStart(2, '0') + ':' + String(menit).padStart(2, '0');
+
+  return {
+    success: true,
+    check_in_time: time,
+    distance_meter: dist,
+    status: status
+  };
+}
+
+function simulateCheckOut(lat, lng, officeLocation) {
+  const dist = distanceMeters(lat, lng, officeLocation.latitude, officeLocation.longitude);
+  const radius = officeLocation.radius_meter;
+
+  if (dist > radius) {
+    const err = new Error(`Anda berada di luar radius (${dist} m). Maksimal ${radius} m dari pesantren.`);
+    err.status = 422;
+    throw err;
+  }
+
+  const now = new Date();
+  const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+  return {
+    success: true,
+    check_out_time: time,
+    distance_meter: dist
+  };
+}
+
+async function fetchWithAuth(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
+  // --- GET request: ambil dari file JSON statis ---
+  if (method === 'GET') {
+    // Pisahkan path dari query string agar .json bisa ditaruh di posisi benar
+    const qsIndex = path.indexOf('?');
+    const basePath = qsIndex === -1 ? path : path.slice(0, qsIndex);
+    const qs = qsIndex === -1 ? '' : path.slice(qsIndex);
+    const url = APP_CONFIG.apiBaseUrl + basePath + '.json' + qs;
+    const res = await fetch(url);
+    let body = null;
+    try { body = await res.json(); } catch (e) { /* non-JSON */ }
+    if (!res.ok) {
+      const message = (body && body.message) ? body.message : 'Terjadi kesalahan, silakan coba lagi.';
+      const err = new Error(message);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+
+  // --- POST request: simulasi check-in / check-out ---
+  // (tidak ada backend, semua logika dijalankan di client)
+  throw new Error('POST requests are handled by simulateCheckIn / simulateCheckOut directly.');
 }
 
 function distanceMeters(lat1, lon1, lat2, lon2) {
@@ -550,7 +653,15 @@ function attendanceApp() {
     async loadTodayStatus() {
       this.loadingToday = true;
       try {
-        this.todayStatus = await fetchWithAuth('/attendance/today');
+        // Cek localStorage dulu — jika user sudah check-in/out hari ini,
+        // pakai data dari localStorage agar tidak hilang saat refresh
+        const stored = getTodayFromStorage();
+        if (stored && (stored.checked_in || stored.checked_out)) {
+          this.todayStatus = stored;
+        } else {
+          const data = await fetchWithAuth('/attendance/today');
+          this.todayStatus = data;
+        }
       } catch (e) {
         this.showToast('error', 'Gagal memuat status presensi hari ini', e.message);
       } finally {
@@ -649,14 +760,13 @@ function attendanceApp() {
     async checkIn() {
       this.submitting = true;
       try {
-        const res = await fetchWithAuth('/attendance/check-in', {
-          method: 'POST',
-          body: JSON.stringify({ latitude: this.currentLat, longitude: this.currentLng, accuracy: this.accuracy })
-        });
+        // Simulasi check-in di sisi client (tidak ada backend)
+        const res = simulateCheckIn(this.currentLat, this.currentLng, this.officeLocation);
         this.todayStatus.checked_in = true;
         this.todayStatus.check_in_time = res.check_in_time;
         this.todayStatus.check_in_distance_meter = res.distance_meter;
         this.todayStatus.status = res.status;
+        saveTodayToStorage(this.todayStatus);
         this.showToast('success', 'Absen masuk berhasil', 'Pukul ' + res.check_in_time + ' · ' + res.distance_meter + ' m dari lokasi');
       } catch (e) {
         this.showToast('error', 'Absen masuk gagal', e.message);
@@ -668,12 +778,11 @@ function attendanceApp() {
     async checkOut() {
       this.submitting = true;
       try {
-        const res = await fetchWithAuth('/attendance/check-out', {
-          method: 'POST',
-          body: JSON.stringify({ latitude: this.currentLat, longitude: this.currentLng, accuracy: this.accuracy })
-        });
+        // Simulasi check-out di sisi client (tidak ada backend)
+        const res = simulateCheckOut(this.currentLat, this.currentLng, this.officeLocation);
         this.todayStatus.checked_out = true;
         this.todayStatus.check_out_time = res.check_out_time;
+        saveTodayToStorage(this.todayStatus);
         this.showToast('success', 'Absen pulang berhasil', 'Pukul ' + res.check_out_time);
       } catch (e) {
         this.showToast('error', 'Absen pulang gagal', e.message);

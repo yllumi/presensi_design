@@ -1,0 +1,194 @@
+[
+  {
+    "date": "2026-07-02",
+    "check_in_time": "07:00",
+    "check_out_time": "15:23",
+    "status": "hadir",
+    "check_in_distance_meter": 45,
+    "check_out_distance_meter": 46
+  },
+  {
+    "date": "2026-07-01",
+    "check_in_time": "07:19",
+    "check_out_time": "15:23",
+    "status": "terlambat",
+    "check_in_distance_meter": 36,
+    "check_out_distance_meter": 84
+  },
+  {
+    "date": "2026-06-30",
+    "check_in_time": "07:09",
+    "check_out_time": "15:13",
+    "status": "hadir",
+    "check_in_distance_meter": 14,
+    "check_out_distance_meter": 18
+  },
+  {
+    "date": "2026-06-29",
+    "check_in_time": "07:03",
+    "check_out_time": "15:07",
+    "status": "hadir",
+    "check_in_distance_meter": 74,
+    "check_out_distance_meter": 18
+  },
+  {
+    "date": "2026-06-26",
+    "check_in_time": "07:21",
+    "check_out_time": "15:22",
+    "status": "terlambat",
+    "check_in_distance_meter": 176,
+    "check_out_distance_meter": 84
+  },
+  {
+    "date": "2026-06-25",
+    "check_in_time": "07:03",
+    "check_out_time": "15:14",
+    "status": "hadir",
+    "check_in_distance_meter": 45,
+    "check_out_distance_meter": 15
+  },
+  {
+    "date": "2026-06-24",
+    "check_in_time": "07:06",
+    "check_out_time": "15:10",
+    "status": "hadir",
+    "check_in_distance_meter": 45,
+    "check_out_distance_meter": 34
+  },
+  {
+    "date": "2026-06-23",
+    "check_in_time": "07:45",
+    "check_out_time": "15:24",
+    "status": "terlambat",
+    "check_in_distance_meter": 96,
+    "check_out_distance_meter": 28
+  },
+  {
+    "date": "2026-06-22",
+    "check_in_time": "07:06",
+    "check_out_time": "15:03",
+    "status": "hadir",
+    "check_in_distance_meter": 55,
+    "check_out_distance_meter": 59
+  },
+  {
+    "date": "2026-06-19",
+    "check_in_time": "07:04",
+    "check_out_time": "15:25",
+    "status": "hadir",
+    "check_in_distance_meter": 15,
+    "check_out_distance_meter": 73
+  },
+  {
+    "date": "2026-06-18",
+    "check_in_time": "07:18",
+    "check_out_time": "15:29",
+    "status": "terlambat",
+    "check_in_distance_meter": 106,
+    "check_out_distance_meter": 25
+  },
+  {
+    "date": "2026-06-17",
+    "check_in_time": "07:24",
+    "check_out_time": "15:26",
+    "status": "terlambat",
+    "check_in_distance_meter": 170,
+    "check_out_distance_meter": 61
+  },
+  {
+    "date": "2026-06-16",
+    "check_in_time": "07:03",
+    "check_out_time": "15:22",
+    "status": "hadir",
+    "check_in_distance_meter": 18,
+    "check_out_distance_meter": 20
+  },
+  {
+    "date": "2026-06-15",
+    "check_in_time": "07:39",
+    "check_out_time": "15:09",
+    "status": "terlambat",
+    "check_in_distance_meter": 30,
+    "check_out_distance_meter": 44
+  },
+  {
+    "date": "2026-06-12",
+    "check_in_time": "07:06",
+    "check_out_time": "15:08",
+    "status": "hadir",
+    "check_in_distance_meter": 68,
+    "check_out_distance_meter": 61
+  },
+  {
+    "date": "2026-06-11",
+    "check_in_time": "07:05",
+    "check_out_time": "15:11",
+    "status": "hadir",
+    "check_in_distance_meter": 36,
+    "check_out_distance_meter": 49
+  },
+  {
+    "date": "2026-06-10",
+    "check_in_time": "07:09",
+    "check_out_time": "15:20",
+    "status": "hadir",
+    "check_in_distance_meter": 31,
+    "check_out_distance_meter": 83
+  },
+  {
+    "date": "2026-06-09",
+    "check_in_time": "07:20",
+    "check_out_time": "15:14",
+    "status": "terlambat",
+    "check_in_distance_meter": 107,
+    "check_out_distance_meter": 49
+  },
+  {
+    "date": "2026-06-08",
+    "check_in_time": "07:22",
+    "check_out_time": "15:21",
+    "status": "terlambat",
+    "check_in_distance_meter": 93,
+    "check_out_distance_meter": 22
+  },
+  {
+    "date": "2026-06-05",
+    "check_in_time": "07:41",
+    "check_out_time": "15:01",
+    "status": "terlambat",
+    "check_in_distance_meter": 90,
+    "check_out_distance_meter": 66
+  },
+  {
+    "date": "2026-06-04",
+    "check_in_time": "07:01",
+    "check_out_time": "15:06",
+    "status": "hadir",
+    "check_in_distance_meter": 50,
+    "check_out_distance_meter": 42
+  },
+  {
+    "date": "2026-06-03",
+    "check_in_time": "07:06",
+    "check_out_time": "15:28",
+    "status": "hadir",
+    "check_in_distance_meter": 68,
+    "check_out_distance_meter": 33
+  },
+  {
+    "date": "2026-06-02",
+    "check_in_time": "07:02",
+    "check_out_time": "15:07",
+    "status": "hadir",
+    "check_in_distance_meter": 78,
+    "check_out_distance_meter": 48
+  },
+  {
+    "date": "2026-06-01",
+    "check_in_time": "07:06",
+    "check_out_time": "15:28",
+    "status": "hadir",
+    "check_in_distance_meter": 61,
+    "check_out_distance_meter": 61
+  }
+]
