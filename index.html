@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Presensi Karyawan</title>
+<!--
+  =====================================================================
+  HALAMAN PRESENSI KARYAWAN — SIAP PRODUKSI
+  =====================================================================
+  Kontrak API yang diharapkan dari backend Webman (sesuaikan
+  APP_CONFIG.apiBaseUrl di bawah dengan prefix rute Anda):
+
+  GET  {apiBaseUrl}/me
+       -> { id, name, role, unit }
+
+  GET  {apiBaseUrl}/office-locations/active
+       -> { id, name, latitude, longitude, radius_meter }
+
+  GET  {apiBaseUrl}/attendance/today
+       -> { checked_in: bool, checked_out: bool,
+            check_in_time: "07:58"|null, check_out_time: "15:02"|null,
+            check_in_distance_meter: 42|null, status: "hadir"|"terlambat"|null }
+
+  POST {apiBaseUrl}/attendance/check-in
+       body: { latitude, longitude, accuracy }
+       -> 200 { success:true, check_in_time, distance_meter, status }
+       -> 422 { success:false, message: "Anda berada di luar radius (165 m)" }
+
+  POST {apiBaseUrl}/attendance/check-out
+       body: { latitude, longitude, accuracy }
+       -> 200 { success:true, check_out_time, distance_meter }
+       -> 422 { success:false, message }
+
+  GET  {apiBaseUrl}/attendance/history?limit=30
+       -> [{ date:"2026-07-02", check_in_time, check_out_time, status,
+             check_in_distance_meter, check_out_distance_meter }]
+
+  CATATAN KEAMANAN:
+  - Jarak yang dihitung di halaman ini (Haversine di JS) HANYA untuk
+    umpan balik visual instan ke karyawan. Validasi jarak yang
+    menentukan sah/tidaknya presensi WAJIB dihitung ulang di server
+    (jangan percaya nilai jarak dari client).
+  - Sesuaikan fetchWithAuth() di bawah dengan mekanisme autentikasi
+    Anda (session cookie Webman, token header, atau CSRF meta tag).
+  =====================================================================
+-->
+<meta name="csrf-token" content="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.13.5/cdn.min.js" defer></script>
+<style>
+  :root{
+    --bg-page:#E7ECDF; --bg-surface:#ffffff; --bg-surface-2:#F3F5EC;
+    --ink:#142019; --ink-soft:#5B6A5F; --ink-faint:#92A092;
+    --primary:#17493C; --primary-soft:#DCE9E1;
+    --brass:#C79A3E; --brass-soft:#F3E7CC; --brass-ink:#8A6A22;
+    --rust:#B65B45; --rust-soft:#F3DED7;
+    --line:#E3E7DA;
+    --radius-lg:24px; --radius-md:16px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg-page);
+    font-family:'Plus Jakarta Sans',sans-serif;
+    color:var(--ink);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  [x-cloak]{display:none!important;}
+
+  .app-shell{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    background:var(--bg-surface-2);
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+  @media (min-width:640px){
+    body{ padding:32px 16px; }
+    .app-shell{
+      min-height:calc(100vh - 64px);
+      border-radius:32px;
+      box-shadow:0 40px 80px -30px rgba(20,32,25,0.35), 0 0 0 1px rgba(20,32,25,0.05);
+      overflow:hidden;
+    }
+  }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px;
+    flex-shrink:0;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:9px; }
+  .topbar .brand-mark{
+    width:32px;height:32px;border-radius:10px;background:var(--primary);
+    display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;
+  }
+  .topbar .brand-name{ font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:600; }
+  .topbar .brand-sub{ font-size:10.5px; color:var(--ink-faint); }
+
+  .content{ flex:1; overflow-y:auto; padding:4px 20px 32px; }
+
+  .tabs{ display:flex; gap:6px; margin:6px 0 18px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:999px; padding:4px; }
+  .tabs button{ flex:1; padding:9px; border:none; background:none; border-radius:999px;
+    font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; font-weight:700; color:var(--ink-faint); cursor:pointer; }
+  .tabs button.active{ background:var(--primary); color:#fff; }
+
+  .greeting .eyebrow{ font-size:12.5px; color:var(--ink-soft); font-weight:500; }
+  .greeting h2{ font-family:'Space Grotesk',sans-serif; font-size:20px; margin:2px 0 0; font-weight:600; }
+  .greeting .role{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+
+  .clock-card{
+    background:var(--primary); color:#fff; border-radius:var(--radius-lg);
+    padding:20px 20px 18px; margin:16px 0; position:relative; overflow:hidden;
+  }
+  .clock-card::after{ content:""; position:absolute; right:-30px; top:-30px; width:140px; height:140px;
+    border-radius:50%; background:rgba(255,255,255,0.06); }
+  .clock-card .date{ font-size:12px; color:rgba(255,255,255,0.72); font-weight:500; }
+  .clock-card .time{ font-family:'Space Grotesk',sans-serif; font-size:40px; font-weight:600;
+    font-variant-numeric: tabular-nums; margin-top:2px; }
+  .clock-card .time span{ opacity:.55; font-size:24px; }
+
+  .card{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+
+  .geo-top{ display:flex; align-items:center; gap:14px; }
+  .radar{ width:64px; height:64px; flex-shrink:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  .radar .ring{ position:absolute; width:100%; height:100%; border-radius:50%; border:1.5px solid var(--primary); opacity:0; }
+  .radar.active .ring{ animation: pulse 2.4s ease-out infinite; }
+  .radar.inactive .ring{ border-color: var(--ink-faint); animation:none; opacity:0; }
+  .radar .ring:nth-child(2){ animation-delay:0.8s; }
+  .radar .ring:nth-child(3){ animation-delay:1.6s; }
+  @keyframes pulse{ 0%{ transform:scale(.4); opacity:.55; } 100%{ transform:scale(1); opacity:0; } }
+  .radar .core{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:var(--primary-soft); color:var(--primary); z-index:2; }
+  .radar.inactive .core{ background:var(--rust-soft); color:var(--rust); }
+  .radar.pending .core{ background:var(--bg-surface-2); color:var(--ink-faint); }
+
+  .geo-status{ flex:1; min-width:0; }
+  .geo-status .label{ font-family:'Space Grotesk',sans-serif; font-size:14.5px; font-weight:600; }
+  .geo-status .label.active{ color:var(--primary); }
+  .geo-status .label.inactive{ color:var(--rust); }
+  .geo-status .label.pending{ color:var(--ink-faint); }
+  .geo-status .distance{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .geo-status .distance b{ color:var(--ink); font-weight:700; }
+
+  .geo-meta{ display:flex; justify-content:space-between; margin-top:14px; padding-top:12px;
+    border-top:1px dashed var(--line); font-size:11.5px; color:var(--ink-faint); }
+  .accuracy-warn{ display:flex; gap:8px; align-items:flex-start; background:var(--brass-soft); color:var(--brass-ink);
+    border-radius:var(--radius-sm); padding:9px 11px; margin-top:12px; font-size:11.5px; line-height:1.5; }
+
+  .error-box{ display:flex; gap:10px; align-items:flex-start; background:var(--rust-soft); color:var(--rust);
+    border-radius:var(--radius-md); padding:13px 14px; margin-bottom:14px; font-size:12.5px; line-height:1.55; }
+  .error-box button{ margin-top:8px; background:var(--rust); color:#fff; border:none; padding:6px 12px;
+    border-radius:999px; font-size:11.5px; font-weight:700; cursor:pointer; }
+
+  .cta-btn{ width:100%; padding:16px; border-radius:999px; border:none; font-family:'Space Grotesk',sans-serif;
+    font-size:15.5px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    gap:8px; transition:transform .15s ease, opacity .15s ease; }
+  .cta-btn:active{ transform:scale(.98); }
+  .cta-btn.enabled{ background:var(--primary); color:#fff; }
+  .cta-btn.enabled.pulang{ background:var(--brass-ink); }
+  .cta-btn.disabled{ background:var(--bg-surface); color:var(--ink-faint); border:1.5px solid var(--line); cursor:not-allowed; }
+  .cta-btn .spinner{ width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,0.4);
+    border-top-color:#fff; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .cta-helper{ text-align:center; font-size:11.5px; color:var(--ink-faint); margin-top:9px; padding:0 8px; line-height:1.5; }
+  .cta-helper.warn{ color:var(--rust); }
+
+  .section-label{ font-family:'Space Grotesk',sans-serif; font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    margin:24px 0 10px 2px; text-transform:uppercase; letter-spacing:.06em; }
+
+  .today-item{ display:flex; align-items:center; gap:12px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 14px; margin-bottom:8px; }
+  .today-item .dot{ width:34px; height:34px; border-radius:50%; background:var(--primary-soft); color:var(--primary);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .today-item .dot.out{ background:var(--brass-soft); color:var(--brass-ink); }
+  .today-item .dot.muted{ background:var(--bg-surface-2); color:var(--ink-faint); }
+  .today-item .info{ flex:1; min-width:0; }
+  .today-item .info .t1{ font-size:13.5px; font-weight:600; }
+  .today-item .info .t2{ font-size:11.5px; color:var(--ink-faint); }
+  .today-item .badge{ font-size:10.5px; font-weight:700; background:var(--brass-soft); color:var(--brass-ink);
+    padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .today-item .badge.ontime{ background:var(--primary-soft); color:var(--primary); }
+
+  .hist-summary{ background:var(--bg-surface); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:16px; display:flex; margin:10px 0 18px; }
+  .hist-summary .col{ flex:1; text-align:center; border-right:1px solid var(--line); }
+  .hist-summary .col:last-child{ border-right:none; }
+  .hist-summary .col .num{ font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:700; color:var(--primary); }
+  .hist-summary .col .lbl{ font-size:10.5px; color:var(--ink-faint); margin-top:2px; }
+
+  .hist-row{ display:flex; align-items:center; gap:12px; background:var(--bg-surface); border:1px solid var(--line);
+    border-radius:var(--radius-md); padding:12px 13px; margin-bottom:8px; }
+  .hist-row .icn{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hist-row .icn.in{ background:var(--primary-soft); color:var(--primary); }
+  .hist-row .icn.late{ background:var(--rust-soft); color:var(--rust); }
+  .hist-row .body{ flex:1; min-width:0; }
+  .hist-row .body .r1{ font-size:13px; font-weight:600; }
+  .hist-row .body .r2{ font-size:11px; color:var(--ink-faint); margin-top:1px; }
+  .hist-row .status{ font-size:10px; font-weight:700; padding:4px 8px; border-radius:999px;
+    background:var(--primary-soft); color:var(--primary); white-space:nowrap; }
+  .hist-row .status.late{ background:var(--rust-soft); color:var(--rust); }
+
+  .skeleton{ background:linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-surface-2) 37%, var(--bg-surface) 63%);
+    background-size:400% 100%; animation:shimmer 1.4s ease infinite; border-radius:var(--radius-md); }
+  @keyframes shimmer{ 0%{background-position:100% 0;} 100%{background-position:-100% 0;} }
+  .skel-card{ height:100px; margin-bottom:14px; }
+  .skel-row{ height:56px; margin-bottom:8px; }
+
+  .empty-state{ text-align:center; padding:30px 12px; color:var(--ink-faint); font-size:12.5px; }
+
+  .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px; max-width:440px; width:calc(100% - 40px);
+    background:var(--primary); color:#fff; border-radius:var(--radius-md); padding:13px 15px;
+    display:flex; align-items:center; gap:11px; box-shadow:0 20px 40px -15px rgba(15,30,22,0.5); z-index:60; }
+  .toast.error{ background:var(--rust); }
+  .toast .icn{ width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.16);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .toast .t1{ font-size:13px; font-weight:700; }
+  .toast .t2{ font-size:11px; opacity:.85; margin-top:1px; }
+
+  svg{ display:block; }
+</style>
+</head>
+<body>
+
+<div id="app" x-data="attendanceApp()" x-init="init()" x-cloak>
+  <div class="app-shell">
+
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg width="16" height="16" viewBox="0 0 28 28" fill="currentColor">
+            <path d="M14 4c-3 2.5-5 5.5-5 9a5 5 0 0010 0c0-3.5-2-6.5-5-9z"/>
+            <rect x="13" y="1" width="2" height="3"/>
+            <rect x="5" y="21" width="18" height="2" opacity="0.55"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">Presensi Pesantren</div>
+          <div class="brand-sub" x-text="officeLocation ? officeLocation.name : 'Memuat lokasi...'"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="tabs">
+        <button :class="tab==='home' && 'active'" @click="tab='home'">Beranda</button>
+        <button :class="tab==='history' && 'active'" @click="switchToHistory()">Riwayat</button>
+      </div>
+
+      <div x-show="tab==='home'">
+
+        <div class="greeting">
+          <div class="eyebrow">Assalamu'alaikum,</div>
+          <h2 x-text="employee.name || 'Memuat...'"></h2>
+          <div class="role" x-text="[employee.role, employee.unit].filter(Boolean).join(' · ')"></div>
+        </div>
+
+        <div class="clock-card">
+          <div class="date" x-text="dateLong"></div>
+          <div class="time"><span x-text="clockHM"></span><span x-text="':' + clockS"></span></div>
+        </div>
+
+        <template x-if="geoErrorMsg">
+          <div class="error-box">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10 6v5M10 14h.01" stroke-linecap="round"/><circle cx="10" cy="10" r="8"/></svg>
+            <div>
+              <div x-text="geoErrorMsg"></div>
+              <button @click="retryLocation()">Coba Lagi</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="card" x-show="!geoErrorMsg">
+          <div class="geo-top">
+            <div class="radar" :class="geoLoading ? 'pending' : (inRadius ? 'active' : 'inactive')">
+              <template x-if="!geoLoading"><div class="ring"></div></template>
+              <template x-if="!geoLoading"><div class="ring"></div></template>
+              <template x-if="!geoLoading"><div class="ring"></div></template>
+              <div class="core">
+                <svg x-show="!geoLoading" width="18" height="18" viewBox="0 0 28 28" fill="currentColor">
+                  <path d="M14 4c-3 2.5-5 5.5-5 9a5 5 0 0010 0c0-3.5-2-6.5-5-9z"/>
+                  <rect x="13" y="1" width="2" height="3"/>
+                  <rect x="5" y="21" width="18" height="2" opacity="0.55"/>
+                </svg>
+                <div x-show="geoLoading" class="spinner" style="border-color:rgba(23,73,60,0.25);border-top-color:var(--primary);"></div>
+              </div>
+            </div>
+            <div class="geo-status">
+              <template x-if="geoLoading">
+                <div class="label pending">Mendeteksi lokasi Anda...</div>
+              </template>
+              <template x-if="!geoLoading">
+                <div class="label" :class="inRadius ? 'active' : 'inactive'" x-text="inRadius ? 'Dalam radius pesantren' : 'Di luar radius pesantren'"></div>
+              </template>
+              <div class="distance" x-show="!geoLoading">
+                Jarak Anda <b x-text="distance !== null ? distance + ' m' : '—'"></b> dari titik lokasi
+              </div>
+            </div>
+          </div>
+          <div class="geo-meta" x-show="!geoLoading">
+            <span>Radius absen: <b style="color:var(--ink)" x-text="(officeLocation ? officeLocation.radius_meter : '—') + ' m'"></b></span>
+            <span x-text="'Akurasi GPS: ' + (accuracy !== null ? Math.round(accuracy) + ' m' : '—')"></span>
+          </div>
+          <div class="accuracy-warn" x-show="!geoLoading && accuracy !== null && accuracy > APP_CONFIG.minAccuracyMeter">
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10 6v5M10 14h.01" stroke-linecap="round"/><circle cx="10" cy="10" r="8"/></svg>
+            <span>Akurasi GPS kurang baik. Coba pindah ke area terbuka agar deteksi lokasi lebih akurat.</span>
+          </div>
+        </div>
+
+        <template x-if="!geoErrorMsg">
+          <div>
+            <button
+              class="cta-btn"
+              :class="ctaEnabled ? ('enabled ' + (todayStatus.checked_in ? 'pulang' : '')) : 'disabled'"
+              :disabled="!ctaEnabled || submitting"
+              @click="handleCta()">
+              <span x-show="submitting" class="spinner"></span>
+              <svg x-show="!submitting && !todayStatus.checked_in" width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span x-text="ctaLabel"></span>
+            </button>
+            <div class="cta-helper" :class="!inRadius && !geoLoading && 'warn'">
+              <template x-if="geoLoading">Menunggu deteksi lokasi sebelum bisa absen...</template>
+              <template x-if="!geoLoading && todayStatus.checked_in && todayStatus.checked_out">Presensi hari ini sudah lengkap.</template>
+              <template x-if="!geoLoading && !inRadius && !(todayStatus.checked_in && todayStatus.checked_out)">
+                <div>Anda harus berada dalam radius <span x-text="officeLocation ? officeLocation.radius_meter : '—'"></span> m dari pesantren untuk bisa absen.</div>
+              </template>
+              <template x-if="!geoLoading && inRadius && !(todayStatus.checked_in && todayStatus.checked_out)">
+                <div>Anda berada dalam jangkauan. Ketuk tombol untuk mencatat kehadiran.</div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <div class="section-label">Aktivitas Hari Ini</div>
+        <template x-if="loadingToday">
+          <div class="skeleton skel-row"></div>
+        </template>
+        <template x-if="!loadingToday && todayStatus.checked_in">
+          <div class="today-item">
+            <div class="dot">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="info">
+              <div class="t1">Absen Masuk</div>
+              <div class="t2" x-text="'Pukul ' + todayStatus.check_in_time + (todayStatus.check_in_distance_meter !== null ? (' · ' + todayStatus.check_in_distance_meter + ' m dari lokasi') : '')"></div>
+            </div>
+            <div class="badge" :class="todayStatus.status==='hadir' && 'ontime'" x-text="todayStatus.status==='terlambat' ? 'Terlambat' : 'Tepat waktu'"></div>
+          </div>
+        </template>
+        <template x-if="!loadingToday && todayStatus.checked_out">
+          <div class="today-item">
+            <div class="dot out">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="12" height="12" rx="2"/></svg>
+            </div>
+            <div class="info">
+              <div class="t1">Absen Pulang</div>
+              <div class="t2" x-text="'Pukul ' + todayStatus.check_out_time"></div>
+            </div>
+          </div>
+        </template>
+        <template x-if="!loadingToday && !todayStatus.checked_in">
+          <div class="today-item">
+            <div class="dot muted">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="info">
+              <div class="t1" style="color:var(--ink-faint)">Belum ada absen masuk</div>
+              <div class="t2">Menunggu Anda memasuki radius lokasi</div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div x-show="tab==='history'">
+        <div class="greeting" style="padding-bottom:2px;">
+          <div class="eyebrow">Riwayat</div>
+          <h2>Presensi Saya</h2>
+        </div>
+
+        <template x-if="loadingHistory">
+          <div>
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-row"></div>
+            <div class="skeleton skel-row"></div>
+          </div>
+        </template>
+
+        <template x-if="!loadingHistory">
+          <div>
+            <div class="hist-summary">
+              <div class="col"><div class="num" x-text="historySummary.hadir"></div><div class="lbl">Hadir</div></div>
+              <div class="col"><div class="num" x-text="historySummary.terlambat"></div><div class="lbl">Terlambat</div></div>
+              <div class="col"><div class="num" x-text="historySummary.total"></div><div class="lbl">Total Tercatat</div></div>
+            </div>
+
+            <template x-for="h in history" :key="h.date">
+              <div class="hist-row">
+                <div class="icn" :class="h.status==='terlambat' ? 'late' : 'in'">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="body">
+                  <div class="r1" x-text="formatDateLabel(h.date) + ' · Masuk ' + h.check_in_time"></div>
+                  <div class="r2" x-text="h.check_out_time ? ('Pulang ' + h.check_out_time) : 'Belum absen pulang'"></div>
+                </div>
+                <div class="status" :class="h.status==='terlambat' && 'late'" x-text="h.status==='terlambat' ? 'Terlambat' : 'Tepat waktu'"></div>
+              </div>
+            </template>
+
+            <div class="empty-state" x-show="history.length===0">Belum ada riwayat presensi.</div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="toast" :class="toast.type" x-show="toast.show" x-transition x-cloak>
+      <div class="icn">
+        <svg x-show="toast.type!=='error'" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2"><path d="M4 10l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg x-show="toast.type==='error'" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2"><path d="M6 6l8 8M14 6l-8 8" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="t1" x-text="toast.title"></div>
+        <div class="t2" x-show="toast.desc" x-text="toast.desc"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const APP_CONFIG = {
+  apiBaseUrl: '/api',
+  minAccuracyMeter: 50,
+  geoTimeout: 15000,
+  geoMaximumAge: 5000,
+  historyLimit: 30
+};
+
+async function fetchWithAuth(path, options = {}) {
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const headers = Object.assign(
+    { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    csrfMeta && csrfMeta.content ? { 'X-CSRF-TOKEN': csrfMeta.content } : {},
+    options.headers || {}
+  );
+  const res = await fetch(APP_CONFIG.apiBaseUrl + path, {
+    credentials: 'same-origin',
+    ...options,
+    headers
+  });
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* respons kosong/non-JSON */ }
+  if (!res.ok) {
+    const message = (body && body.message) ? body.message : 'Terjadi kesalahan, silakan coba lagi.';
+    const err = new Error(message);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function attendanceApp() {
+  return {
+    APP_CONFIG,
+    tab: 'home',
+    employee: { name: '', role: '', unit: '' },
+    officeLocation: null,
+
+    clockHM: '', clockS: '', dateLong: '',
+
+    geoLoading: true,
+    geoErrorMsg: null,
+    geoWatchId: null,
+    currentLat: null,
+    currentLng: null,
+    accuracy: null,
+    distance: null,
+    inRadius: false,
+
+    loadingToday: true,
+    todayStatus: { checked_in: false, checked_out: false, check_in_time: null, check_out_time: null, check_in_distance_meter: null, status: null },
+    submitting: false,
+
+    loadingHistory: true,
+    historyLoaded: false,
+    history: [],
+
+    toast: { show: false, type: 'success', title: '', desc: '' },
+
+    async init() {
+      this.startClock();
+      await Promise.all([
+        this.loadEmployee(),
+        this.loadOfficeLocation(),
+        this.loadTodayStatus()
+      ]);
+      this.startWatchingLocation();
+    },
+
+    startClock() {
+      const update = () => {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        this.clockHM = hh + ':' + mm;
+        this.clockS = ss;
+        const hari = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][d.getDay()];
+        const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][d.getMonth()];
+        this.dateLong = hari + ', ' + d.getDate() + ' ' + bulan + ' ' + d.getFullYear();
+      };
+      update();
+      setInterval(update, 1000);
+    },
+
+    async loadEmployee() {
+      try {
+        const data = await fetchWithAuth('/me');
+        this.employee = { name: data.name, role: data.role, unit: data.unit };
+      } catch (e) {
+        this.employee = { name: 'Gagal memuat profil', role: '', unit: '' };
+      }
+    },
+
+    async loadOfficeLocation() {
+      try {
+        this.officeLocation = await fetchWithAuth('/office-locations/active');
+      } catch (e) {
+        this.showToast('error', 'Gagal memuat lokasi pesantren', e.message);
+      }
+    },
+
+    async loadTodayStatus() {
+      this.loadingToday = true;
+      try {
+        this.todayStatus = await fetchWithAuth('/attendance/today');
+      } catch (e) {
+        this.showToast('error', 'Gagal memuat status presensi hari ini', e.message);
+      } finally {
+        this.loadingToday = false;
+      }
+    },
+
+    switchToHistory() {
+      this.tab = 'history';
+      if (!this.historyLoaded) this.loadHistory();
+    },
+
+    async loadHistory() {
+      this.loadingHistory = true;
+      try {
+        this.history = await fetchWithAuth('/attendance/history?limit=' + APP_CONFIG.historyLimit);
+        this.historyLoaded = true;
+      } catch (e) {
+        this.showToast('error', 'Gagal memuat riwayat presensi', e.message);
+      } finally {
+        this.loadingHistory = false;
+      }
+    },
+
+    startWatchingLocation() {
+      if (!('geolocation' in navigator)) {
+        this.geoLoading = false;
+        this.geoErrorMsg = 'Perangkat atau browser ini tidak mendukung layanan lokasi.';
+        return;
+      }
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        this.geoLoading = false;
+        this.geoErrorMsg = 'Halaman ini perlu diakses melalui HTTPS agar lokasi dapat dideteksi.';
+        return;
+      }
+      this.geoLoading = true;
+      this.geoErrorMsg = null;
+      this.geoWatchId = navigator.geolocation.watchPosition(
+        pos => this.handlePosition(pos),
+        err => this.handleGeoError(err),
+        { enableHighAccuracy: true, timeout: APP_CONFIG.geoTimeout, maximumAge: APP_CONFIG.geoMaximumAge }
+      );
+    },
+
+    handlePosition(pos) {
+      this.geoLoading = false;
+      this.geoErrorMsg = null;
+      this.currentLat = pos.coords.latitude;
+      this.currentLng = pos.coords.longitude;
+      this.accuracy = pos.coords.accuracy;
+      if (this.officeLocation) {
+        this.distance = distanceMeters(
+          this.currentLat, this.currentLng,
+          this.officeLocation.latitude, this.officeLocation.longitude
+        );
+        this.inRadius = this.distance <= this.officeLocation.radius_meter;
+      }
+    },
+
+    handleGeoError(err) {
+      this.geoLoading = false;
+      if (err.code === err.PERMISSION_DENIED) {
+        this.geoErrorMsg = 'Izin lokasi ditolak. Aktifkan izin lokasi untuk situs ini lewat pengaturan browser Anda, lalu coba lagi.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        this.geoErrorMsg = 'Lokasi tidak dapat dideteksi saat ini. Pastikan GPS aktif dan coba lagi.';
+      } else if (err.code === err.TIMEOUT) {
+        this.geoErrorMsg = 'Deteksi lokasi memakan waktu terlalu lama. Coba lagi.';
+      } else {
+        this.geoErrorMsg = 'Terjadi kesalahan saat mendeteksi lokasi.';
+      }
+    },
+
+    retryLocation() {
+      if (this.geoWatchId !== null) navigator.geolocation.clearWatch(this.geoWatchId);
+      this.startWatchingLocation();
+    },
+
+    get ctaEnabled() {
+      if (this.geoLoading || this.submitting || !this.inRadius) return false;
+      if (this.todayStatus.checked_in && this.todayStatus.checked_out) return false;
+      return true;
+    },
+
+    get ctaLabel() {
+      if (this.submitting) return 'Memproses...';
+      if (this.todayStatus.checked_in && this.todayStatus.checked_out) return 'Presensi Selesai';
+      if (this.todayStatus.checked_in) return 'Absen Pulang';
+      return 'Absen Masuk';
+    },
+
+    async handleCta() {
+      if (!this.ctaEnabled) return;
+      this.todayStatus.checked_in ? this.checkOut() : this.checkIn();
+    },
+
+    async checkIn() {
+      this.submitting = true;
+      try {
+        const res = await fetchWithAuth('/attendance/check-in', {
+          method: 'POST',
+          body: JSON.stringify({ latitude: this.currentLat, longitude: this.currentLng, accuracy: this.accuracy })
+        });
+        this.todayStatus.checked_in = true;
+        this.todayStatus.check_in_time = res.check_in_time;
+        this.todayStatus.check_in_distance_meter = res.distance_meter;
+        this.todayStatus.status = res.status;
+        this.showToast('success', 'Absen masuk berhasil', 'Pukul ' + res.check_in_time + ' · ' + res.distance_meter + ' m dari lokasi');
+      } catch (e) {
+        this.showToast('error', 'Absen masuk gagal', e.message);
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    async checkOut() {
+      this.submitting = true;
+      try {
+        const res = await fetchWithAuth('/attendance/check-out', {
+          method: 'POST',
+          body: JSON.stringify({ latitude: this.currentLat, longitude: this.currentLng, accuracy: this.accuracy })
+        });
+        this.todayStatus.checked_out = true;
+        this.todayStatus.check_out_time = res.check_out_time;
+        this.showToast('success', 'Absen pulang berhasil', 'Pukul ' + res.check_out_time);
+      } catch (e) {
+        this.showToast('error', 'Absen pulang gagal', e.message);
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    get historySummary() {
+      const total = this.history.length;
+      const terlambat = this.history.filter(h => h.status === 'terlambat').length;
+      return { total, terlambat, hadir: total - terlambat };
+    },
+
+    formatDateLabel(isoDate) {
+      const d = new Date(isoDate + 'T00:00:00');
+      const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][d.getMonth()];
+      return d.getDate() + ' ' + bulan;
+    },
+
+    showToast(type, title, desc) {
+      this.toast = { show: true, type, title, desc: desc || '' };
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(() => { this.toast.show = false; }, 3800);
+    }
+  };
+}
+</script>
+</body>
+</html>
